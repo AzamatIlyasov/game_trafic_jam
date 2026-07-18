@@ -1,7 +1,9 @@
 import { idmAccel } from './idm';
 import { makeRing, makeSerpentine, PathGeometry, type Serpentine } from './geometry';
 import { TrafficLight } from './trafficLight';
-import type { SimConfig, Vehicle } from './types';
+import type { SimConfig, SimStats, Vehicle } from './types';
+
+export type { SimStats } from './types';
 
 let nextId = 1;
 
@@ -16,18 +18,6 @@ function makeVehicle(x: number, v: number): Vehicle {
     perturb: 0,
     wait: 0,
   };
-}
-
-export interface SimStats {
-  n: number;
-  /** средняя скорость, м/с */
-  avgV: number;
-  /** поток через детектор, машин/час */
-  flowPerH: number;
-  /** доля стоящих машин (v < 1 м/с) */
-  stoppedFrac: number;
-  /** суммарное время простоя всех машин, с */
-  totalWait: number;
 }
 
 const FLOW_WINDOW = 30; // с

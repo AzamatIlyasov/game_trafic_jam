@@ -16,7 +16,7 @@ export interface IDMParams {
   bMax: number;
 }
 
-export type Mode = 'ring' | 'arterial';
+export type Mode = 'ring' | 'arterial' | 'grid';
 
 export type LightPhase = 'GREEN' | 'AMBER' | 'RED';
 
@@ -24,6 +24,45 @@ export interface CycleConfig {
   green: number;
   amber: number;
   red: number;
+}
+
+/** Настройки одного перекрёстка в сеточном режиме. */
+export interface LightCfg {
+  /** зелёный север-юг (вертикальные улицы), с */
+  greenNS: number;
+  /** зелёный запад-восток (горизонтальные улицы), с */
+  greenEW: number;
+  amber: number;
+  /** сдвиг фазы, с */
+  offset: number;
+  /** адаптивный режим */
+  adaptive: boolean;
+  /** начинать с зелёного С-Ю */
+  startNS: boolean;
+}
+
+export interface GridCfg {
+  rows: number;
+  cols: number;
+  spacing: number;
+  spawnPerMin: number;
+  /** дефолт для всех перекрёстков */
+  defLight: LightCfg;
+  /** переопределения по перекрёсткам, ключ "r,c" */
+  overrides: Record<string, Partial<LightCfg>>;
+}
+
+/** Метрики симуляции (общие для всех режимов). */
+export interface SimStats {
+  n: number;
+  /** средняя скорость, м/с */
+  avgV: number;
+  /** поток через детектор, машин/час */
+  flowPerH: number;
+  /** доля стоящих машин (v < 1 м/с) */
+  stoppedFrac: number;
+  /** суммарное время простоя всех машин, с */
+  totalWait: number;
 }
 
 export interface SimConfig {
@@ -46,6 +85,12 @@ export interface SimConfig {
   greenWave: number;
   /** адаптивные («умные») светофоры */
   adaptive: boolean;
+  /** настройки сеточного режима */
+  grid: GridCfg;
+}
+
+export function defaultLightCfg(): LightCfg {
+  return { greenNS: 16, greenEW: 16, amber: 3, offset: 0, adaptive: false, startNS: true };
 }
 
 export interface Vehicle {
@@ -86,4 +131,12 @@ export const DEFAULT_CONFIG: SimConfig = {
   cycle: { green: 18, amber: 3, red: 18 },
   greenWave: 0,
   adaptive: false,
+  grid: {
+    rows: 4,
+    cols: 4,
+    spacing: 130,
+    spawnPerMin: 90,
+    defLight: { greenNS: 16, greenEW: 16, amber: 3, offset: 0, adaptive: false, startNS: true },
+    overrides: {},
+  },
 };

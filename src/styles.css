@@ -245,3 +245,50 @@ button:active {
   line-height: 1.45;
   color: #7d8794;
 }
+
+#editor {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 10px 12px 12px;
+  background: rgba(18, 22, 28, 0.96);
+  border: 1px solid #2c3440;
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+  z-index: 5;
+}
+
+#editor.hidden {
+  display: none;
+}
+
+.edhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.edx {
+  min-width: 34px;
+  min-height: 34px;
+  font-size: 15px;
+}
+
+#editor .seg {
+  margin: 6px 0;
+}
+
+#editor .srow {
+  padding: 4px 0;
+}
+
+#editor .chips {
+  margin: 8px 0 0;
+}
