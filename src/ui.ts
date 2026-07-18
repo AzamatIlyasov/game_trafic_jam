@@ -1,4 +1,4 @@
-import type { Mode, SimConfig } from './sim/types';
+import type { LightCfg, Mode, SimConfig } from './sim/types';
 
 /** API приложения, которым пользуется панель управления. */
 export interface AppApi {
@@ -15,6 +15,16 @@ export interface AppApi {
   setVehicleCount(n: number): void;
   applyPreset(key: string): void;
   saveCfg(): void;
+  /** grid: настройки выбранного перекрёстка (с учётом дефолта) */
+  gridLightCfg(node: number): LightCfg;
+  /** grid: применить настройки к перекрёстку */
+  setLight(node: number, patch: Partial<LightCfg>): void;
+  /** grid: применить ко всем перекрёсткам */
+  setAllLights(patch: Partial<LightCfg>): void;
+  /** grid: сбросить настройки перекрёстка к дефолту */
+  resetLight(node: number): void;
+  /** grid: подпись перекрёстка, напр. "ряд 2 · кол 3" */
+  gridLabel(node: number): string;
 }
 
 type Kind = 'hot' | 'structural' | 'vcount';
@@ -69,6 +79,28 @@ const SLIDERS: { section: string; modes: Mode[] | null; items: SliderDef[] }[] =
     ],
   },
   {
+    section: '🏙 Дорога — сетка',
+    modes: ['grid'],
+    items: [
+      {
+        label: 'Ряды (улицы ↕)', min: 2, max: 8, step: 1, kind: 'structural', modes: null,
+        get: (c) => c.grid.rows, set: (c, v) => (c.grid.rows = v), fmt: (v) => `${v}`,
+      },
+      {
+        label: 'Колонки (улицы ↔)', min: 2, max: 8, step: 1, kind: 'structural', modes: null,
+        get: (c) => c.grid.cols, set: (c, v) => (c.grid.cols = v), fmt: (v) => `${v}`,
+      },
+      {
+        label: 'Длина квартала', min: 70, max: 260, step: 10, kind: 'structural', modes: null,
+        get: (c) => c.grid.spacing, set: (c, v) => (c.grid.spacing = v), fmt: (v) => `${v} м`,
+      },
+      {
+        label: 'Поток на въездах', min: 0, max: 240, step: 5, kind: 'hot', modes: null,
+        get: (c) => c.grid.spawnPerMin, set: (c, v) => (c.grid.spawnPerMin = v), fmt: (v) => `${v} маш/мин`,
+      },
+    ],
+  },
+  {
     section: '🚗 Водители',
     modes: null,
     items: [
@@ -88,7 +120,7 @@ const SLIDERS: { section: string; modes: Mode[] | null; items: SliderDef[] }[] =
   },
   {
     section: '🚦 Светофоры',
-    modes: null,
+    modes: ['ring', 'arterial'],
     items: [
       {
         label: 'Зелёный', min: 5, max: 60, step: 1, kind: 'hot', modes: null,
@@ -111,6 +143,7 @@ const PRESET_LABELS: [string, string][] = [
   ['rush', '🌆 Час пик'],
   ['wave', '🟢 Зелёная волна'],
   ['smart', '🧠 Умные светофоры'],
+  ['grid', '🏙 Город (сетка)'],
 ];
 
 function btn(text: string, cls: string, onClick: () => void): HTMLButtonElement {
@@ -170,7 +203,7 @@ export function buildPanel(el: HTMLElement, api: AppApi): PanelHandle {
       });
       return b;
     };
-    modeRow.append(mkMode('ring', '⭕ Кольцо'), mkMode('arterial', '🛣 Магистраль'));
+    modeRow.append(mkMode('ring', '⭕ Кольцо'), mkMode('arterial', '🛣 Магистраль'), mkMode('grid', '🏙 Сетка'));
     el.append(modeRow);
 
     // слайдеры по секциям
@@ -213,31 +246,166 @@ export function buildPanel(el: HTMLElement, api: AppApi): PanelHandle {
       }
     }
 
-    // адаптивные светофоры
-    const adRow = document.createElement('label');
-    adRow.className = 'srow check';
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = cfg.adaptive;
-    cb.addEventListener('change', () => {
-      cfg.adaptive = cb.checked;
-      api.saveCfg();
-    });
-    const adName = document.createElement('span');
-    adName.className = 'sname';
-    adName.textContent = '🧠 Адаптивные светофоры (по очередям)';
-    adRow.append(cb, adName);
-    el.append(adRow);
+    // адаптивные светофоры (глобально) — только кольцо/магистраль
+    if (cfg.mode !== 'grid') {
+      const adRow = document.createElement('label');
+      adRow.className = 'srow check';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = cfg.adaptive;
+      cb.addEventListener('change', () => {
+        cfg.adaptive = cb.checked;
+        api.saveCfg();
+      });
+      const adName = document.createElement('span');
+      adName.className = 'sname';
+      adName.textContent = '🧠 Адаптивные светофоры (по очередям)';
+      adRow.append(cb, adName);
+      el.append(adRow);
+    }
 
     const hint = document.createElement('p');
     hint.className = 'hint';
     hint.textContent =
-      'Фантомная пробка: включи «Кольцо», подними плотность до ~40+ машин и нажми 💥 — ' +
-      'волна затора побежит назад по потоку без всякой причины. На диаграмме 📈 она видна ' +
-      'как красные наклонные полосы.';
+      cfg.mode === 'grid'
+        ? '👆 Тапни по любому перекрёстку, чтобы настроить его светофор отдельно: режим ' +
+          '(фиксированный/адаптивный), зелёный С↕Ю и З↔В, сдвиг фазы. Так можно собрать «зелёную ' +
+          'волну» вручную или сравнить умные светофоры с обычными.'
+        : 'Фантомная пробка: включи «Кольцо», подними плотность до ~40+ машин и нажми 💥 — ' +
+          'волна затора побежит назад по потоку без всякой причины. На диаграмме 📈 она видна ' +
+          'как красные наклонные полосы.';
     el.append(hint);
   }
 
   rebuild();
   return { refresh: rebuild };
+}
+
+export interface EditorHandle {
+  open(node: number): void;
+  close(): void;
+  isOpen(): boolean;
+}
+
+interface EditSlider {
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  key: keyof LightCfg;
+  fmt: (v: number) => string;
+}
+
+const EDIT_SLIDERS: EditSlider[] = [
+  { label: 'Зелёный С↕Ю', min: 4, max: 60, step: 1, key: 'greenNS', fmt: (v) => `${v} с` },
+  { label: 'Зелёный З↔В', min: 4, max: 60, step: 1, key: 'greenEW', fmt: (v) => `${v} с` },
+  { label: 'Жёлтый', min: 1, max: 6, step: 1, key: 'amber', fmt: (v) => `${v} с` },
+  { label: 'Сдвиг фазы', min: 0, max: 60, step: 1, key: 'offset', fmt: (v) => `${v} с` },
+];
+
+/** Плавающий редактор одного перекрёстка (grid-режим). */
+export function buildEditor(el: HTMLElement, api: AppApi): EditorHandle {
+  let node = -1;
+
+  function render(): void {
+    el.textContent = '';
+    if (node < 0) {
+      el.classList.add('hidden');
+      return;
+    }
+    el.classList.remove('hidden');
+    const cfg = api.gridLightCfg(node);
+
+    const head = document.createElement('div');
+    head.className = 'edhead';
+    const title = document.createElement('span');
+    title.textContent = `🚦 ${api.gridLabel(node)}`;
+    const close = btn('✕', 'edx', () => handle.close());
+    head.append(title, close);
+    el.append(head);
+
+    // режим фиксированный/адаптивный
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    const mk = (adaptive: boolean, label: string) =>
+      btn(label, cfg.adaptive === adaptive ? 'segbtn active' : 'segbtn', () => {
+        api.setLight(node, { adaptive });
+        render();
+      });
+    seg.append(mk(false, '⏱ Фиксированный'), mk(true, '🧠 Адаптивный'));
+    el.append(seg);
+
+    // слайдеры
+    for (const s of EDIT_SLIDERS) {
+      if (s.key === 'offset' && cfg.adaptive) continue; // сдвиг фазы не для адаптивного
+      const row = document.createElement('label');
+      row.className = 'srow';
+      const name = document.createElement('span');
+      name.className = 'sname';
+      name.textContent = s.label;
+      const val = document.createElement('span');
+      val.className = 'sval';
+      const cur = cfg[s.key] as number;
+      val.textContent = s.fmt(cur);
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = String(s.min);
+      input.max = String(s.max);
+      input.step = String(s.step);
+      input.value = String(cur);
+      input.addEventListener('input', () => {
+        const v = parseFloat(input.value);
+        val.textContent = s.fmt(v);
+        api.setLight(node, { [s.key]: v } as Partial<LightCfg>);
+      });
+      row.append(name, input, val);
+      el.append(row);
+    }
+
+    // главное направление
+    const dirRow = document.createElement('div');
+    dirRow.className = 'seg';
+    const mkDir = (ns: boolean, label: string) =>
+      btn(label, cfg.startNS === ns ? 'segbtn active' : 'segbtn', () => {
+        api.setLight(node, { startNS: ns });
+        render();
+      });
+    dirRow.append(mkDir(true, 'Старт С↕Ю'), mkDir(false, 'Старт З↔В'));
+    el.append(dirRow);
+
+    // действия
+    const acts = document.createElement('div');
+    acts.className = 'chips';
+    acts.append(
+      btn('📋 Ко всем', 'chip', () => {
+        const c = api.gridLightCfg(node);
+        api.setAllLights({
+          greenNS: c.greenNS,
+          greenEW: c.greenEW,
+          amber: c.amber,
+          adaptive: c.adaptive,
+          startNS: c.startNS,
+        });
+      }),
+      btn('↺ Сброс узла', 'chip', () => {
+        api.resetLight(node);
+        render();
+      }),
+    );
+    el.append(acts);
+  }
+
+  const handle: EditorHandle = {
+    open(n) {
+      node = n;
+      render();
+    },
+    close() {
+      node = -1;
+      render();
+    },
+    isOpen: () => node >= 0,
+  };
+  render();
+  return handle;
 }
